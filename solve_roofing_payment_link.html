@@ -1203,6 +1203,102 @@
     return formatCardFromCard(card);
   }
 
+  function isBrowserNetworkError(error) {
+    const message = String(error && error.message ? error.message : error || '').toLowerCase();
+    return (
+      message === 'load failed' ||
+      message === 'failed to fetch' ||
+      message.includes('networkerror') ||
+      message.includes('network request failed') ||
+      message.includes('network connection was lost') ||
+      message.includes('internet connection appears to be offline')
+    );
+  }
+
+  function isCustomerInputError(error) {
+    if (!error) return false;
+    const type = String(error.type || '');
+    if (type === 'card_error' || type === 'validation_error') return true;
+    const code = String(error.code || '');
+    return /^(incorrect_|invalid_|incomplete_|expired_card|card_declined|authentication_required|postal_code_invalid)/.test(code);
+  }
+
+  function checkoutFailure(error, step) {
+    const rawMessage = error && error.message ? String(error.message) : 'Unexpected error';
+    const type = (error && (error.type || error.name)) || 'Error';
+    if (isBrowserNetworkError(error)) {
+      return {
+        message: `The browser could not reach the server while ${step} (${rawMessage})`,
+        rawMessage,
+        type,
+        code: 'browser_network',
+      };
+    }
+    return {
+      message: step ? `${rawMessage} while ${step}` : rawMessage,
+      rawMessage,
+      type,
+      code: error && error.code ? String(error.code) : '',
+    };
+  }
+
+  async function fetchCheckout(url, options, step) {
+    try {
+      return await fetch(url, options);
+    } catch (error) {
+      throw checkoutFailure(error, step);
+    }
+  }
+
+  function notifyErrorDetails(detail) {
+    if (!detail) return { error_message: 'Unexpected error', error_type: 'Error', error_code: '' };
+    if (typeof detail === 'string') return { error_message: detail, error_type: 'Error', error_code: '' };
+    return {
+      error_message: detail.message || detail.error_message || String(detail),
+      error_type: detail.type || detail.name || 'Error',
+      error_code: detail.code || detail.error_code || '',
+    };
+  }
+
+  function notifyRoofingPaymentError(detail) {
+    const data = getFormPayload();
+    const err = notifyErrorDetails(detail);
+    fetch(`${BASE}/api/notify-roofing-payment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: data.name || '',
+        email: data.email || '',
+        phone: data.phone || '',
+        address: data.address || '',
+        city: data.city || '',
+        state: data.state || '',
+        postal_code: data.postal || '',
+        amount: Number.isFinite(amountCents) ? Math.round(amountCents) / 100 : 1031,
+        currency: 'cad',
+        division: 'roofing',
+        status: 'error',
+        payment_id: '',
+        error_message: err.error_message,
+        error_type: err.error_type,
+        error_code: err.error_code,
+      }),
+    }).catch((e) => {
+      console.error('Failed to send Roofing error webhook:', e);
+    });
+  }
+
+  function showStripePayError(error, resetPayButton) {
+    if (isCustomerInputError(error)) {
+      showPayError((error && error.message) || 'Please check your card details and try again.');
+      if (typeof resetPayButton === 'function') resetPayButton();
+      return;
+    }
+    notifyRoofingPaymentError(error);
+    showPayError((error && error.message) || 'Payment could not be completed.');
+    if (typeof resetPayButton === 'function') resetPayButton();
+  }
+
   async function notifyRoofingPaymentSuccess(paymentId, formData, paymentMethod) {
     if (!paymentId) return;
     const sentKey = `solveRoofingWebhook:${paymentId}`;
@@ -1243,7 +1339,8 @@
     }
   }
 
-  function showBrandedPreview(message) {
+  function showBrandedPreview(message, detail) {
+    notifyRoofingPaymentError(detail || message);
     applyOrderSummary(103100, 'cad', DEFAULT_PRODUCT);
     document.getElementById('payment-element').style.display = 'none';
     document.getElementById('stripe-placeholder').style.display = 'block';
@@ -1289,16 +1386,22 @@
     if (postalFromUrl) document.getElementById('customer-postal').value = postalFromUrl;
 
     try {
-      const configRes = await fetch(`${BASE}/api/roofing-payment-config`);
-      const config = await configRes.json();
+      const configRes = await fetchCheckout(`${BASE}/api/roofing-payment-config`, undefined, 'loading checkout settings');
+      let config;
+      try {
+        config = await configRes.json();
+      } catch (error) {
+        throw checkoutFailure(error, 'reading the checkout settings');
+      }
       if (!configRes.ok) {
-        showBrandedPreview(config.error || 'Stripe publishable key is not configured');
+        const message = config.error || 'Stripe publishable key is not configured';
+        showBrandedPreview(message, { message, type: 'api_error', code: String(configRes.status) });
         return;
       }
 
       applyOrderSummary(config.amountCents, config.currency, DEFAULT_PRODUCT);
 
-      const intentRes = await fetch(`${BASE}/api/roofing-create-payment-intent`, {
+      const intentRes = await fetchCheckout(`${BASE}/api/roofing-create-payment-intent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1307,10 +1410,16 @@
           job_id: jobId,
           description,
         }),
-      });
-      const intent = await intentRes.json();
+      }, 'creating the payment intent');
+      let intent;
+      try {
+        intent = await intentRes.json();
+      } catch (error) {
+        throw checkoutFailure(error, 'reading the payment intent');
+      }
       if (!intentRes.ok) {
-        showBrandedPreview(intent.error || 'Stripe secret key is not configured');
+        const message = intent.error || 'Stripe secret key is not configured';
+        showBrandedPreview(message, { message, type: 'api_error', code: String(intentRes.status) });
         return;
       }
       clientSecret = intent.clientSecret || '';
@@ -1395,14 +1504,17 @@
       showState('pay');
     } catch (e) {
       console.error(e);
-      showBrandedPreview(e.message || 'Unable to start Stripe checkout yet.');
+      const message = (e && (e.rawMessage || e.message)) || 'Unable to start Stripe checkout yet.';
+      showBrandedPreview(message, e || message);
     }
   }
 
   document.getElementById('submit-btn').addEventListener('click', async () => {
     clearPayError();
     if (!checkoutReady || !stripe || !elements) {
-      showPayError('Stripe is not ready yet. Add your Roofing Stripe keys in Vercel, then refresh.');
+      const message = 'Stripe is not ready yet. Add your Roofing Stripe keys in Vercel, then refresh.';
+      notifyRoofingPaymentError({ message, type: 'checkout_error', code: 'stripe_not_ready' });
+      showPayError(message);
       return;
     }
 
@@ -1459,12 +1571,15 @@
     const btn = document.getElementById('submit-btn');
     btn.disabled = true;
     document.getElementById('submit-text').textContent = 'Processing…';
-
-    const submitted = await elements.submit();
-    if (submitted.error) {
-      showPayError(submitted.error.message);
+    const resetPayButton = () => {
       btn.disabled = false;
       document.getElementById('submit-text').textContent = `Complete Deposit · ${formatMoney(amountCents, activeCurrency)}`;
+    };
+
+    try {
+    const submitted = await elements.submit();
+    if (submitted.error) {
+      showStripePayError(submitted.error, resetPayButton);
       return;
     }
 
@@ -1473,9 +1588,7 @@
       params: { billing_details },
     });
     if (created.error) {
-      showPayError(created.error.message);
-      btn.disabled = false;
-      document.getElementById('submit-text').textContent = `Complete Deposit · ${formatMoney(amountCents, activeCurrency)}`;
+      showStripePayError(created.error, resetPayButton);
       return;
     }
 
@@ -1510,9 +1623,7 @@
     }
 
     if (error) {
-      showPayError(error.message);
-      btn.disabled = false;
-      document.getElementById('submit-text').textContent = `Complete Deposit · ${formatMoney(amountCents, activeCurrency)}`;
+      showStripePayError(error, resetPayButton);
       return;
     }
 
@@ -1531,6 +1642,15 @@
 
     document.getElementById('success-amount').textContent = 'Your payment is being confirmed…';
     showState('success');
+    } catch (e) {
+      console.error(e);
+      const detail = isBrowserNetworkError(e)
+        ? checkoutFailure(e, 'confirming the card payment')
+        : (e || { message: 'Payment could not be completed.', type: 'checkout_error', code: 'incomplete' });
+      notifyRoofingPaymentError(detail);
+      showPayError((detail && (detail.rawMessage || detail.message)) || 'Payment could not be completed.');
+      resetPayButton();
+    }
   });
 
   initCountryPicker();
