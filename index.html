@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Solar Installation Deposit — Solve Energy</title>
+  <title>Solar Installation Down Payment — Solve Energy</title>
   <link rel="icon" type="image/png" href="assets/favicon.png" />
   <link rel="apple-touch-icon" href="assets/favicon.png" />
   <script src="https://js.stripe.com/v3/"></script>
@@ -871,7 +871,7 @@
       />
     </div>
     <p class="intro">
-      This deposit confirms your place in our installation pipeline and allows us to begin
+      This down payment confirms your place in our installation pipeline and allows us to begin
       the planning process to ensure a smooth, efficient install.
     </p>
   </header>
@@ -882,14 +882,14 @@
     <div id="state-loading" class="state state-center active">
       <div class="spinner"></div>
       <h2>Preparing secure checkout</h2>
-      <p>Setting up your Solve Energy deposit…</p>
+      <p>Setting up your Solve Energy down payment…</p>
     </div>
 
     <!-- Pay -->
     <div id="state-pay" class="state">
       <div class="eyebrow">Secure checkout</div>
-      <h1>Solar Installation Deposit</h1>
-      <p class="card-sub">Provide your information below to complete your project deposit.</p>
+      <h1>Solar Installation Down Payment</h1>
+      <p class="card-sub">Provide your information below to complete your project down payment.</p>
 
       <div class="error-banner" id="pay-error"></div>
       <div class="info-banner" id="pay-info"></div>
@@ -930,7 +930,7 @@
 
       <div class="summary">
         <div class="summary-row">
-          <div class="summary-item" id="product-display">Total Deposit</div>
+          <div class="summary-item" id="product-display">Total Down Payment</div>
           <div class="summary-price" id="amount-display">CA$1,031.00</div>
         </div>
       </div>
@@ -976,7 +976,7 @@
           <rect x="3" y="11" width="18" height="11" rx="2" />
           <path d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
-        <span id="submit-text">Complete Deposit</span>
+        <span id="submit-text">Complete Down Payment</span>
       </button>
 
       <div class="trust">
@@ -999,7 +999,7 @@
       <div class="eyebrow">Payment received</div>
       <h2>Thank you</h2>
       <p>
-        Your Solve Energy project deposit is confirmed. A receipt will be emailed to you shortly,
+        Your Solve Energy project down payment is confirmed. A receipt will be emailed to you shortly,
         and our team will follow up to keep your install moving forward.
       </p>
       <p class="paid-amount" id="success-amount"></p>
@@ -1082,7 +1082,7 @@
   let amountCents = 103100;
   let activeCurrency = 'cad';
   let checkoutReady = false;
-  const DEFAULT_PRODUCT = 'Total Deposit';
+  const DEFAULT_PRODUCT = 'Total Down Payment';
 
   const COUNTRIES = [
     { code: 'CA', name: 'Canada' },
@@ -1261,7 +1261,7 @@
     const money = formatMoney(amountCents, activeCurrency);
     document.getElementById('amount-display').textContent = money;
     document.getElementById('product-display').textContent = productName || DEFAULT_PRODUCT;
-    document.getElementById('submit-text').textContent = `Complete Deposit · ${money}`;
+    document.getElementById('submit-text').textContent = `Complete Down Payment · ${money}`;
   }
 
   const NOTIFY_KEY = 'solveEnergyPaymentNotify';
@@ -1433,7 +1433,7 @@
 
     const redirectStatus = params.get('redirect_status');
     if (params.get('payment_intent') && redirectStatus === 'succeeded') {
-      document.getElementById('success-amount').textContent = 'Your deposit was completed successfully.';
+      document.getElementById('success-amount').textContent = 'Your down payment was completed successfully.';
       showState('success');
       let saved = null;
       try { saved = JSON.parse(sessionStorage.getItem(NOTIFY_KEY) || 'null'); } catch (e) { saved = null; }
@@ -1671,7 +1671,7 @@
 
     const resetPayButton = () => {
       btn.disabled = false;
-      document.getElementById('submit-text').textContent = `Complete Deposit · ${formatMoney(amountCents, activeCurrency)}`;
+      document.getElementById('submit-text').textContent = `Complete Down Payment · ${formatMoney(amountCents, activeCurrency)}`;
     };
 
     try {

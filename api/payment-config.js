@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   const priceId = process.env.STRIPE_PRICE_ID;
   const productIdFallback = process.env.STRIPE_PRODUCT_ID || 'prod_V3qNf5KztX5oWV';
-  const productName = 'Total Deposit';
+  const productName = 'Total Down Payment';
 
   if (!publishableKey) {
     return res.status(500).json({ error: 'Stripe publishable key is not configured' });
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
       amountCents = price.unit_amount;
       currency = (price.currency || currency).toLowerCase();
 
-      // Keep display label as Total Deposit; only sync product id from Stripe.
+      // Keep display label as Total Down Payment; only sync product id from Stripe.
       if (typeof price.product === 'object' && price.product && !price.product.deleted) {
         productId = price.product.id || productId;
       } else if (typeof price.product === 'string') {

@@ -15,7 +15,7 @@ export default async function handler(req, res) {
 
   const priceId = process.env.STRIPE_PRICE_ID;
   const productIdFallback = process.env.STRIPE_PRODUCT_ID || 'prod_V3qNf5KztX5oWV';
-  const productName = 'Total Deposit';
+  const productName = 'Total Down Payment';
 
   const { email, name, job_id, description } = req.body || {};
 
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
       amountCents = price.unit_amount;
       currency = (price.currency || currency).toLowerCase();
 
-      // Keep display/description as Total Deposit; only sync product id from Stripe.
+      // Keep display/description as Total Down Payment; only sync product id from Stripe.
       if (typeof price.product === 'object' && price.product && !price.product.deleted) {
         productId = price.product.id || productId;
       } else if (typeof price.product === 'string') {
