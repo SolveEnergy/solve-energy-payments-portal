@@ -1240,9 +1240,24 @@
     return /^(incorrect_|invalid_|incomplete_|expired_card|card_declined|authentication_required|postal_code_invalid)/.test(code);
   }
 
+  function isAuthenticationFailure(error) {
+    return String(error && error.code ? error.code : '') === 'payment_intent_authentication_failure';
+  }
+
   function showStripePayError(error, resetPayButton) {
     if (isCustomerInputError(error)) {
       showPayError((error && error.message) || 'Please check your card details and try again.');
+      if (typeof resetPayButton === 'function') resetPayButton();
+      return;
+    }
+    // Keep customer on the pay form (same banner as empty-field errors) but still alert Make.
+    // Page shows only the human message — type/code stay in the webhook email.
+    if (isAuthenticationFailure(error)) {
+      if (error) console.error(error);
+      notifyEnergyPaymentError(error);
+      showPayError(
+        'We are unable to authenticate your payment method. Please choose a different payment method and try again.'
+      );
       if (typeof resetPayButton === 'function') resetPayButton();
       return;
     }
